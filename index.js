@@ -47,7 +47,8 @@ module.exports = class DynamoDBContextStore {
                 locationId: params.locationId,
                 authToken: params.authToken,
                 refreshToken: params.refreshToken,
-                config: params.config
+                config: params.config,
+                state: params.state
             }
         };
         return new Promise((resolve, reject) => {
@@ -62,15 +63,33 @@ module.exports = class DynamoDBContextStore {
     }
 
     update(installedAppId, params) {
+        const names = {};
+        const values = {};
+        const expressions = [];
+        for (const name of Object.keys(params)) {
+
+            const expressionNameKeys = [];
+            const nameSegs = name.split('.');
+            for (const i in nameSegs) {
+                const nameKey = `#${nameSegs.slice(0,i+1).join('_')}`;
+                names[nameKey] = nameSegs[i];
+                expressionNameKeys.push(nameKey)
+            }
+            const valueKey = `:${nameSegs.join('_')}`;
+            values[valueKey] = params[name];
+            expressions.push(`${expressionNameKeys.join('.')} = ${valueKey}`)
+        }
+
         const data = {
             TableName: this.tableName,
-            Key: {'installedAppId': installedAppId},
-            UpdateExpression: 'SET authToken = :x, refreshToken = :y',
-            ExpressionAttributeValues: {
-                ':x': params.authToken,
-                ':y': params.refreshToken
-            }
+            Key: {
+                installedAppId: installedAppId
+            },
+            UpdateExpression: 'SET ' + expressions.join(', '),
+            ExpressionAttributeNames: names,
+            ExpressionAttributeValues: values
         };
+
         return new Promise((resolve, reject) => {
             this.docClient.update(data, function(err, data) {
                 if (err) {
